@@ -1,0 +1,195 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>席案内検索</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif;
+    background: #f0f2f5; padding: 12px; max-width: 520px; margin: 0 auto;
+  }
+  h1 { text-align: center; font-size: 1.1rem; color: #333; margin: 8px 0 12px; }
+
+  .search-wrap { position: relative; }
+  #q {
+    width: 100%; font-size: 1.1rem; padding: 12px 40px 12px 14px;
+    border: 2px solid #ccc; border-radius: 10px;
+    -webkit-appearance: none; background: #fff;
+  }
+  #q:focus { border-color: #4a90d9; outline: none; }
+  .clear-btn {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: #ccc; color: #fff; border: none; border-radius: 50%;
+    width: 26px; height: 26px; font-size: 15px; cursor: pointer;
+    display: none; line-height: 26px; text-align: center;
+  }
+
+  .meta {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.8rem; color: #888; margin: 8px 4px;
+  }
+
+  .card {
+    background: #fff; border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .info { flex: 1; min-width: 0; }
+  .info .name { font-size: 1.1rem; font-weight: bold; color: #222; }
+  .info .kana { font-size: 0.75rem; color: #aaa; margin-top: 1px; }
+  .info .detail { font-size: 0.82rem; color: #556; margin-top: 4px; line-height: 1.4; }
+  .info .cat {
+    display: inline-block; font-size: 0.7rem; color: #fff; background: #6c8ebf;
+    padding: 1px 8px; border-radius: 4px; margin-top: 4px;
+  }
+  .seat-box {
+    text-align: center; margin-left: 12px; flex-shrink: 0;
+  }
+  .seat-box .label { font-size: 0.65rem; color: #999; }
+  .seat-box .seat {
+    font-size: 1.6rem; font-weight: bold; color: #d9534f;
+    white-space: nowrap;
+  }
+
+  .empty { text-align: center; color: #aaa; margin-top: 48px; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+
+<h1>席案内検索</h1>
+
+<div class="search-wrap">
+  <input type="text" id="q" placeholder="氏名・フリガナ・役職・分類で検索" autofocus>
+  <button class="clear-btn" id="clearBtn" onclick="clearSearch()">×</button>
+</div>
+
+<div class="meta">
+  <span id="count"></span>
+  <span id="total"></span>
+</div>
+
+<div id="results">
+  <p class="empty">名前の一部を入力してください</p>
+</div>
+
+<script>
+// ============================================================
+// ★★★ ここにExcelのH列からコピーしたデータを貼り付ける ★★★
+// ============================================================
+const guests = [
+  {no:1,  cat:"特別来賓", org:"国土交通大臣", title:"衆議院議員", name:"金子　恭之", kana:"カネコヤスシ", seat:"A-1"},
+  {no:2,  cat:"特別来賓", org:"", title:"衆議院議員", name:"吉田　宣弘", kana:"ヨシダノブヒロ", seat:"A-2"},
+  {no:3,  cat:"特別来賓", org:"", title:"参議院議員", name:"馬場　成志", kana:"ババセイシ", seat:"A-3"},
+  {no:4,  cat:"特別来賓", org:"", title:"参議院議員", name:"犬童　周作", kana:"インドウシュウサク", seat:"A-4"},
+  {no:5,  cat:"特別来賓", org:"", title:"参議院議員", name:"本田　顕子", kana:"ホンダアキコ", seat:"A-5"},
+  {no:6,  cat:"特別来賓", org:"", title:"参議院議員松村祥史代理　秘書長", name:"畑山　登", kana:"ハタヤマノボル", seat:"A-6"},
+  {no:7,  cat:"特別来賓", org:"", title:"熊本県知事代理　天草広域本部本部長", name:"浦田　美紀", kana:"ウラタミキ", seat:"A-7"},
+  {no:8,  cat:"特別来賓", org:"", title:"熊本県議会議長代理　熊本県議会議員", name:"池田　和貴", kana:"イケダカズキ", seat:"A-8"},
+  {no:9,  cat:"特別来賓", org:"", title:"熊本県議会議員", name:"楠本　千秋", kana:"クスモトチアキ", seat:"A-9"},
+  {no:10, cat:"特別来賓", org:"", title:"熊本県議会議員", name:"山口　裕", kana:"ヤマグチユタカ", seat:"A-10"},
+  {no:11, cat:"県内市長及び議長", org:"", title:"熊本市副市長", name:"岡田　芳和", kana:"オカダヨシカズ", seat:"A-11"},
+  {no:12, cat:"県内市長及び議長", org:"", title:"八代市副市長", name:"平井　宏英", kana:"ヒライヒロヒデ", seat:"A-12"},
+  {no:13, cat:"県内市長及び議長", org:"", title:"人吉市長", name:"松岡　隼人", kana:"マツオカハヤト", seat:"A-13"},
+  {no:14, cat:"県内市長及び議長", org:"", title:"荒尾市副市長", name:"石川　陽一", kana:"イシカワヨウイチ", seat:"A-14"},
+  {no:15, cat:"県内市長及び議長", org:"", title:"水俣市副市長", name:"緒方　雅一", kana:"オガタマサカズ", seat:"A-15"},
+  {no:16, cat:"県内市長及び議長", org:"", title:"玉名市副市長", name:"吉田　勇人", kana:"ヨシダハヤト", seat:"A-16"},
+  {no:17, cat:"県内市長及び議長", org:"", title:"山鹿市副市長", name:"阿蘇品　貴司", kana:"アソシナタカシ", seat:"A-17"},
+  {no:18, cat:"県内市長及び議長", org:"", title:"菊池市副市長", name:"藤井　一恵", kana:"フジイカズエ", seat:"A-18"},
+  {no:19, cat:"県内市長及び議長", org:"", title:"宇土市長", name:"光井　正吾", kana:"ミツイショウゴ", seat:"A-19"},
+  {no:20, cat:"県内市長及び議長", org:"", title:"上天草市長", name:"堀江　隆臣", kana:"ホリエタカオミ", seat:"A-20"},
+  // ★★★ ここに残り580人分を追加 ★★★
+];
+
+// nan を空文字に置換（Excelから持ってきた場合の対策）
+guests.forEach(g => {
+  if (g.org === "nan") g.org = "";
+  if (g.cat === "nan") g.cat = "";
+  if (g.title === "nan") g.title = "";
+});
+
+// --- DOM要素 ---
+const qEl      = document.getElementById("q");
+const resEl    = document.getElementById("results");
+const countEl  = document.getElementById("count");
+const totalEl  = document.getElementById("total");
+const clearBtn = document.getElementById("clearBtn");
+
+totalEl.textContent = "全 " + guests.length + " 名";
+
+// --- ひらがな⇔カタカナ変換 ---
+function toKatakana(s) {
+  return s.replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0)+0x60));
+}
+function toHiragana(s) {
+  return s.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0)-0x60));
+}
+
+// --- イベント ---
+qEl.addEventListener("input", function() {
+  clearBtn.style.display = this.value ? "block" : "none";
+  search();
+});
+
+function clearSearch() {
+  qEl.value = "";
+  clearBtn.style.display = "none";
+  qEl.focus();
+  search();
+}
+
+// --- 検索 ---
+function search() {
+  const q = qEl.value.trim();
+  if (!q) {
+    resEl.innerHTML = '<p class="empty">名前の一部を入力してください</p>';
+    countEl.textContent = "";
+    return;
+  }
+
+  const qKata = toKatakana(q);
+  const qHira = toHiragana(q);
+
+  const hits = guests.filter(g => {
+    // 氏名（漢字）
+    if (g.name.includes(q)) return true;
+    // フリガナ（カタカナ・ひらがな両対応）
+    const gKata = toKatakana(g.kana);
+    const gHira = toHiragana(g.kana);
+    if (gKata.includes(qKata) || gHira.includes(qHira)) return true;
+    // 分類・所属・役職
+    if (g.cat.includes(q))   return true;
+    if (g.org.includes(q))   return true;
+    if (g.title.includes(q)) return true;
+    return false;
+  });
+
+  countEl.textContent = hits.length + " 件ヒット";
+
+  if (hits.length === 0) {
+    resEl.innerHTML = '<p class="empty">該当する方が見つかりません</p>';
+    return;
+  }
+
+  resEl.innerHTML = hits.map(g => {
+    // 役職と所属を結合して表示（空でなければ）
+    let detail = [g.org, g.title].filter(x => x).join("　");
+    return `
+    <div class="card">
+      <div class="info">
+        <div class="name">${g.name}</div>
+        <div class="kana">${g.kana}</div>
+        ${detail ? '<div class="detail">' + detail + '</div>' : ''}
+        ${g.cat ? '<span class="cat">' + g.cat + '</span>' : ''}
+      </div>
+      <div class="seat-box">
+        <div class="label">座席</div>
+        <div class="seat">${g.seat}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+</script>
+</body>
+</html>
