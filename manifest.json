@@ -1,13 +1,15 @@
 {
   "name": "席案内検索",
   "short_name": "席検索",
+  "description": "招待客の席番号をオフラインで検索",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f0f2f5",
   "theme_color": "#4a90d9",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🪑</text></svg>",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%F0%9F%AA%91%3C/text%3E%3C/svg%3E",
       "sizes": "any",
       "type": "image/svg+xml"
     }
