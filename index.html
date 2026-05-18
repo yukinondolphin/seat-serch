@@ -1,23 +1,27 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>席案内検索</title>
 <link rel="manifest" href="manifest.json">
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
   }
 </script>
- <title>席案内検索</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif;
-    background: #f0f2f5; padding: 12px; max-width: 520px; margin: 0 auto;
+    background: #f0f2f5; padding: 12px 12px 40px; max-width: 520px; margin: 0 auto;
+    -webkit-text-size-adjust: 100%;
   }
-  h1 { text-align: center; font-size: 1.1rem; color: #333; margin: 8px 0 12px; }
+  h1 { text-align: center; font-size: 1.1rem; color: #333; margin: 10px 0 12px; }
 
+  /* --- 検索バー --- */
   .search-wrap { position: relative; }
   #q {
     width: 100%; font-size: 1.1rem; padding: 12px 40px 12px 14px;
@@ -32,11 +36,13 @@
     display: none; line-height: 26px; text-align: center;
   }
 
+  /* --- 件数表示 --- */
   .meta {
     display: flex; justify-content: space-between; align-items: center;
     font-size: 0.8rem; color: #888; margin: 8px 4px;
   }
 
+  /* --- カード --- */
   .card {
     background: #fff; border-radius: 10px; padding: 12px 14px;
     margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -47,19 +53,25 @@
   .info .kana { font-size: 0.75rem; color: #aaa; margin-top: 1px; }
   .info .detail { font-size: 0.82rem; color: #556; margin-top: 4px; line-height: 1.4; }
   .info .cat {
-    display: inline-block; font-size: 0.7rem; color: #fff; background: #6c8ebf;
-    padding: 1px 8px; border-radius: 4px; margin-top: 4px;
+    display: inline-block; font-size: 0.7rem; color: #fff;
+    padding: 2px 8px; border-radius: 4px; margin-top: 5px;
   }
-  .seat-box {
-    text-align: center; margin-left: 12px; flex-shrink: 0;
-  }
+  .seat-box { text-align: center; margin-left: 14px; flex-shrink: 0; }
   .seat-box .label { font-size: 0.65rem; color: #999; }
   .seat-box .seat {
-    font-size: 1.6rem; font-weight: bold; color: #d9534f;
-    white-space: nowrap;
+    font-size: 1.7rem; font-weight: bold; color: #d9534f; white-space: nowrap;
   }
 
+  /* --- 分類ごとの色分け --- */
+  .cat-特別来賓           { background: #c0392b; }
+  .cat-県内市長及び議長   { background: #2980b9; }
+  .cat-default            { background: #6c8ebf; }
+
+  /* --- 空メッセージ --- */
   .empty { text-align: center; color: #aaa; margin-top: 48px; font-size: 0.95rem; }
+
+  /* --- ハイライト --- */
+  mark { background: #fff3cd; color: inherit; border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -82,7 +94,7 @@
 
 <script>
 // ============================================================
-// ★★★ ここにExcelのH列からコピーしたデータを貼り付ける ★★★
+// ★★★ 名簿データ（Excel から貼り替えてください）★★★
 // ============================================================
 const guests = [
   {no:1,  cat:"特別来賓", org:"国土交通大臣", title:"衆議院議員", name:"金子　恭之", kana:"カネコヤスシ", seat:"A-1"},
@@ -105,17 +117,17 @@ const guests = [
   {no:18, cat:"県内市長及び議長", org:"", title:"菊池市副市長", name:"藤井　一恵", kana:"フジイカズエ", seat:"A-18"},
   {no:19, cat:"県内市長及び議長", org:"", title:"宇土市長", name:"光井　正吾", kana:"ミツイショウゴ", seat:"A-19"},
   {no:20, cat:"県内市長及び議長", org:"", title:"上天草市長", name:"堀江　隆臣", kana:"ホリエタカオミ", seat:"A-20"},
-  // ★★★ ここに残り580人分を追加 ★★★
+  // ★★★ 残りのデータをここに追加 ★★★
 ];
 
-// nan を空文字に置換（Excelから持ってきた場合の対策）
+// --- nan 除去（Excel由来の対策）---
 guests.forEach(g => {
-  if (g.org === "nan") g.org = "";
-  if (g.cat === "nan") g.cat = "";
-  if (g.title === "nan") g.title = "";
+  ["cat","org","title","name","kana","seat"].forEach(k => {
+    if (g[k] === "nan" || g[k] == null) g[k] = "";
+  });
 });
 
-// --- DOM要素 ---
+// --- DOM ---
 const qEl      = document.getElementById("q");
 const resEl    = document.getElementById("results");
 const countEl  = document.getElementById("count");
@@ -124,21 +136,31 @@ const clearBtn = document.getElementById("clearBtn");
 
 totalEl.textContent = "全 " + guests.length + " 名";
 
-// --- ひらがな⇔カタカナ変換 ---
-function toKatakana(s) {
-  return s.replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0)+0x60));
+// --- ひらがな⇔カタカナ ---
+function toKata(s){ return s.replace(/[\u3041-\u3096]/g, c=>String.fromCharCode(c.charCodeAt(0)+0x60)); }
+function toHira(s){ return s.replace(/[\u30A1-\u30F6]/g, c=>String.fromCharCode(c.charCodeAt(0)-0x60)); }
+
+// --- ハイライト ---
+function hl(text, q) {
+  if (!q || !text) return text;
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return text.substring(0, idx) + "<mark>" + text.substring(idx, idx + q.length) + "</mark>" + text.substring(idx + q.length);
 }
-function toHiragana(s) {
-  return s.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0)-0x60));
+
+// --- 分類の色CSSクラス ---
+const catClasses = ["特別来賓","県内市長及び議長"];
+function catClass(cat) {
+  return catClasses.includes(cat) ? "cat-" + cat : "cat-default";
 }
 
 // --- イベント ---
-qEl.addEventListener("input", function() {
+qEl.addEventListener("input", function(){
   clearBtn.style.display = this.value ? "block" : "none";
   search();
 });
 
-function clearSearch() {
+function clearSearch(){
   qEl.value = "";
   clearBtn.style.display = "none";
   qEl.focus();
@@ -146,7 +168,7 @@ function clearSearch() {
 }
 
 // --- 検索 ---
-function search() {
+function search(){
   const q = qEl.value.trim();
   if (!q) {
     resEl.innerHTML = '<p class="empty">名前の一部を入力してください</p>';
@@ -154,20 +176,18 @@ function search() {
     return;
   }
 
-  const qKata = toKatakana(q);
-  const qHira = toHiragana(q);
+  const qK = toKata(q);
+  const qH = toHira(q);
 
   const hits = guests.filter(g => {
-    // 氏名（漢字）
-    if (g.name.includes(q)) return true;
-    // フリガナ（カタカナ・ひらがな両対応）
-    const gKata = toKatakana(g.kana);
-    const gHira = toHiragana(g.kana);
-    if (gKata.includes(qKata) || gHira.includes(qHira)) return true;
-    // 分類・所属・役職
+    if (g.name.includes(q))  return true;
+    const gK = toKata(g.kana);
+    const gH = toHira(g.kana);
+    if (gK.includes(qK) || gH.includes(qH)) return true;
     if (g.cat.includes(q))   return true;
     if (g.org.includes(q))   return true;
     if (g.title.includes(q)) return true;
+    if (g.seat.includes(q))  return true;
     return false;
   });
 
@@ -178,16 +198,21 @@ function search() {
     return;
   }
 
+  // ハイライト用：かな検索の場合は元のカナをハイライト対象にする
   resEl.innerHTML = hits.map(g => {
-    // 役職と所属を結合して表示（空でなければ）
-    let detail = [g.org, g.title].filter(x => x).join("　");
+    const detail = [g.org, g.title].filter(x => x).join("　");
+    // どのフィールドにマッチしたか判定してハイライト
+    const hName   = hl(g.name, q);
+    const hKana   = (toKata(g.kana).includes(qK)) ? hl(g.kana, toKata(q)) : hl(g.kana, q);
+    const hDetail = hl(detail, q);
+
     return `
     <div class="card">
       <div class="info">
-        <div class="name">${g.name}</div>
-        <div class="kana">${g.kana}</div>
-        ${detail ? '<div class="detail">' + detail + '</div>' : ''}
-        ${g.cat ? '<span class="cat">' + g.cat + '</span>' : ''}
+        <div class="name">${hName}</div>
+        <div class="kana">${hKana}</div>
+        ${detail ? '<div class="detail">' + hDetail + '</div>' : ''}
+        ${g.cat  ? '<span class="cat ' + catClass(g.cat) + '">' + g.cat + '</span>' : ''}
       </div>
       <div class="seat-box">
         <div class="label">座席</div>
