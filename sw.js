@@ -1,31 +1,40 @@
+// ★ データ更新時はここのバージョンを変える（v1 → v2 → v3 ...）
 const CACHE_NAME = "seat-search-v1";
+
 const FILES = [
   "./",
   "./index.html",
   "./manifest.json"
 ];
 
-// インストール時にファイルをキャッシュ
-self.addEventListener("install", e => {
+// インストール：ファイルをキャッシュに保存
+self.addEventListener("install", function(e) {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES))
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll(FILES);
+    })
   );
   self.skipWaiting();
 });
 
-// 古いキャッシュを削除
-self.addEventListener("activate", e => {
+// 有効化：古いバージョンのキャッシュを削除
+self.addEventListener("activate", function(e) {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    caches.keys().then(function(keys) {
+      return Promise.all(
+        keys.filter(function(k) { return k !== CACHE_NAME; })
+            .map(function(k) { return caches.delete(k); })
+      );
+    })
   );
   self.clients.claim();
 });
 
-// リクエスト時：キャッシュ優先、なければネットワーク
-self.addEventListener("fetch", e => {
+// リクエスト：キャッシュ優先、なければネットワーク
+self.addEventListener("fetch", function(e) {
   e.respondWith(
-    caches.match(e.request).then(res => res || fetch(e.request))
+    caches.match(e.request).then(function(res) {
+      return res || fetch(e.request);
+    })
   );
 });
