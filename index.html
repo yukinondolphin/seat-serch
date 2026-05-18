@@ -16,12 +16,12 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif;
-    background: #f0f2f5; padding: 12px 12px 40px; max-width: 520px; margin: 0 auto;
+    background: #f0f2f5; padding: 12px 12px 40px; max-width: 580px; margin: 0 auto;
     -webkit-text-size-adjust: 100%;
   }
   h1 { text-align: center; font-size: 1.1rem; color: #333; margin: 10px 0 12px; }
 
-  /* --- 検索バー --- */
+  /* 検索バー */
   .search-wrap { position: relative; }
   #q {
     width: 100%; font-size: 1.1rem; padding: 12px 40px 12px 14px;
@@ -36,13 +36,12 @@
     display: none; line-height: 26px; text-align: center;
   }
 
-  /* --- 件数表示 --- */
   .meta {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between;
     font-size: 0.8rem; color: #888; margin: 8px 4px;
   }
 
-  /* --- カード --- */
+  /* カード */
   .card {
     background: #fff; border-radius: 10px; padding: 12px 14px;
     margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -58,20 +57,65 @@
   }
   .seat-box { text-align: center; margin-left: 14px; flex-shrink: 0; }
   .seat-box .label { font-size: 0.65rem; color: #999; }
-  .seat-box .seat {
-    font-size: 1.7rem; font-weight: bold; color: #d9534f; white-space: nowrap;
-  }
+  .seat-box .seat { font-size: 1.7rem; font-weight: bold; color: #d9534f; white-space: nowrap; }
 
-  /* --- 分類ごとの色分け --- */
   .cat-特別来賓           { background: #c0392b; }
   .cat-県内市長及び議長   { background: #2980b9; }
   .cat-default            { background: #6c8ebf; }
 
-  /* --- 空メッセージ --- */
+  mark { background: #fff3cd; color: inherit; border-radius: 2px; }
   .empty { text-align: center; color: #aaa; margin-top: 48px; font-size: 0.95rem; }
 
-  /* --- ハイライト --- */
-  mark { background: #fff3cd; color: inherit; border-radius: 2px; }
+  /* ===== 座席マップ ===== */
+  .map-section {
+    margin-top: 20px; background: #fff; border-radius: 12px;
+    padding: 14px 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .map-title {
+    text-align: center; font-size: 0.9rem; font-weight: bold; color: #555;
+    margin-bottom: 4px;
+  }
+  .floor-label {
+    text-align: center; font-size: 0.75rem; font-weight: bold; color: #fff;
+    background: #555; border-radius: 4px; padding: 3px 0; margin: 10px 0 6px;
+  }
+  .floor-label:first-child { margin-top: 0; }
+  .stage {
+    text-align: center; font-size: 0.7rem; color: #fff; background: #888;
+    border-radius: 4px; padding: 5px 0; margin-bottom: 8px; letter-spacing: 4px;
+  }
+  .row-wrap {
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 2px; gap: 0;
+  }
+  .row-label {
+    font-size: 0.5rem; color: #999; width: 20px; text-align: center;
+    flex-shrink: 0;
+  }
+  .block { display: flex; gap: 1px; }
+  .block-gap { width: 6px; flex-shrink: 0; }
+  .aisle { width: 3px; flex-shrink: 0; }
+  .st {
+    width: 11px; height: 11px; border-radius: 2px;
+    background: #d5dbe3; flex-shrink: 0; cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+  }
+  .st.hit { background: #e74c3c; box-shadow: 0 0 4px rgba(231,76,60,0.6); }
+  .st.hit::after {
+    content: ""; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
+    border: 2px solid #e74c3c; border-radius: 4px;
+    animation: pulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes pulse { from { opacity:1; } to { opacity:0.3; } }
+
+  /* ツールチップ */
+  .tooltip {
+    display: none; position: fixed; background: #333; color: #fff;
+    font-size: 0.75rem; padding: 6px 10px; border-radius: 6px;
+    z-index: 100; pointer-events: none; white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
 </style>
 </head>
 <body>
@@ -92,9 +136,18 @@
   <p class="empty">名前の一部を入力してください</p>
 </div>
 
+<!-- 座席マップ -->
+<div class="map-section">
+  <div class="map-title">座席マップ</div>
+  <div id="seatMap"></div>
+</div>
+
+<!-- ツールチップ -->
+<div class="tooltip" id="tooltip"></div>
+
 <script>
 // ============================================================
-// ★★★ 名簿データ（Excel から貼り替えてください）★★★
+//  名簿データ
 // ============================================================
 const guests = [
   {no:1,  cat:"特別来賓", org:"国土交通大臣", title:"衆議院議員", name:"金子　恭之", kana:"カネコヤスシ", seat:"A-1"},
@@ -120,14 +173,148 @@ const guests = [
   // ★★★ 残りのデータをここに追加 ★★★
 ];
 
-// --- nan 除去（Excel由来の対策）---
+// nan除去
 guests.forEach(g => {
   ["cat","org","title","name","kana","seat"].forEach(k => {
     if (g[k] === "nan" || g[k] == null) g[k] = "";
   });
 });
 
-// --- DOM ---
+// 座席ID → ゲスト のマップ
+const seatToGuest = {};
+guests.forEach(g => { if (g.seat) seatToGuest[g.seat] = g; });
+
+// ============================================================
+//  座席レイアウト定義
+//  各列: { row: "表示名", left: [席番号...], center: [席番号...], right: [席番号...] }
+//  Excelから読み取った実際の配置
+// ============================================================
+const layout = {
+  "1F": {
+    label: "1階",
+    rows: [
+      {row:"1列",  left:[], center:[1,2,3,4,5,6,7,8,9,10,11,12], right:[13,14,15,16,17,18], prefix:"A"},
+      {row:"2列",  left:[], center:[1,2,3,4,5,6,7,8,9,10,11,12], right:[13,14,15,16,17,18,19], prefix:"B"},
+      {row:"3列",  left:[1,2,3,4,5], center:[6,7,8,9,10,11,12,13,14,15,16,17], right:[18,19,20,21,22,23,24,25], prefix:"C"},
+      {row:"4列",  left:[1,2,3,4,5,6], center:[7,8,9,10,11,12,13,14,15,16,17,18], right:[19,20,21,22,23,24,25,26,27], prefix:"D"},
+      {row:"5列",  left:[1,2,3,4,5,6,7,8], center:[9,10,11,12,13,14,15,16,17,18,19,20], right:[21,22,23,24,25,26,27,28,29,30], prefix:"E"},
+      {row:"6列",  left:[1,2,3,4,5,6,7,8,9,10,11], center:[12,13,14,15,16,17,18,19,20,21,22,23], right:[24,25,26,27,28,29,30,31,32,33,34], prefix:"F"},
+      {row:"7列",  left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"G"},
+      {row:"8列",  left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"H"},
+      {row:"9列",  left:[3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"I"},
+    ]
+  },
+  "2F": {
+    label: "2階",
+    rows: [
+      {row:"10列", left:[1,2,3,4,5,6], center:[7,8,9,10,11,12,13,14,15,16,17,18], right:[19,20,21,22,23,24,25,26,27], prefix:"J"},
+      {row:"11列", left:[1,2,3,4,5,6], center:[7,8,9,10,11,12,13,14,15,16,17,18], right:[19,20,21,22,23,24,25,26,27], prefix:"K"},
+      {row:"12列", left:[1,2,3,4,5,6], center:[7,8,9,10,11,12,13,14,15,16,17,18], right:[19,20,21,22,23,24,25,26,27], prefix:"L"},
+      {row:"13列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33], prefix:"M"},
+      {row:"14列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"N"},
+      {row:"15列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"O"},
+      {row:"16列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"P"},
+    ]
+  },
+  "3F": {
+    label: "3階",
+    rows: [
+      {row:"17列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"Q"},
+      {row:"18列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"R"},
+      {row:"19列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"S"},
+      {row:"20列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"T"},
+      {row:"21列", left:[1,2,3,4,5,6,7,8,9,10,11,12], center:[13,14,15,16,17,18,19,20,21,22,23,24], right:[25,26,27,28,29,30,31,32,33,34,35,36], prefix:"U"},
+      {row:"22列", left:[1,2,3,4,5,6,7,8,9,10,11], center:[12,13,14,15,16,17,18,19,20,21,22,23], right:[24,25,26,27,28,29,30,31,32,33,34,35], prefix:"V"},
+    ]
+  }
+};
+
+// ============================================================
+//  座席マップ描画
+// ============================================================
+const mapEl = document.getElementById("seatMap");
+const tooltipEl = document.getElementById("tooltip");
+const seatEls = {}; // "A-1" → DOM要素
+
+function buildMap() {
+  let html = '<div class="stage">ス テ ー ジ</div>';
+
+  for (const floorKey of ["1F","2F","3F"]) {
+    const floor = layout[floorKey];
+    html += '<div class="floor-label">' + floor.label + '</div>';
+
+    for (const r of floor.rows) {
+      html += '<div class="row-wrap">';
+      html += '<div class="row-label">' + r.row + '</div>';
+
+      // 左ブロック
+      html += '<div class="block">';
+      // パディング：最大12席に揃える
+      const leftPad = 12 - r.left.length;
+      for (let p = 0; p < leftPad; p++) html += '<div style="width:11px;flex-shrink:0"></div>';
+      for (const n of r.left) {
+        const sid = r.prefix + "-" + n;
+        html += '<div class="st" data-seat="' + sid + '"></div>';
+      }
+      html += '</div>';
+
+      html += '<div class="block-gap"></div>';
+
+      // 中央ブロック
+      html += '<div class="block">';
+      for (const n of r.center) {
+        const sid = r.prefix + "-" + n;
+        html += '<div class="st" data-seat="' + sid + '"></div>';
+      }
+      html += '</div>';
+
+      html += '<div class="block-gap"></div>';
+
+      // 右ブロック
+      html += '<div class="block">';
+      for (const n of r.right) {
+        const sid = r.prefix + "-" + n;
+        html += '<div class="st" data-seat="' + sid + '"></div>';
+      }
+      const rightPad = 12 - r.right.length;
+      for (let p = 0; p < rightPad; p++) html += '<div style="width:11px;flex-shrink:0"></div>';
+      html += '</div>';
+
+      html += '<div class="row-label">' + r.row + '</div>';
+      html += '</div>';
+    }
+  }
+  mapEl.innerHTML = html;
+
+  // DOM要素のマッピング
+  mapEl.querySelectorAll(".st[data-seat]").forEach(el => {
+    seatEls[el.dataset.seat] = el;
+  });
+}
+
+buildMap();
+
+// ツールチップ
+mapEl.addEventListener("pointerenter", function(e) {
+  const el = e.target.closest(".st[data-seat]");
+  if (!el) return;
+  const sid = el.dataset.seat;
+  const g = seatToGuest[sid];
+  const text = g ? sid + "　" + g.name + "（" + g.kana + "）" : sid + "　（空席）";
+  tooltipEl.textContent = text;
+  tooltipEl.style.display = "block";
+  const rect = el.getBoundingClientRect();
+  tooltipEl.style.left = rect.left + "px";
+  tooltipEl.style.top  = (rect.top - 32) + "px";
+}, true);
+
+mapEl.addEventListener("pointerleave", function(e) {
+  if (e.target.closest(".st")) tooltipEl.style.display = "none";
+}, true);
+
+// ============================================================
+//  検索ロジック
+// ============================================================
 const qEl      = document.getElementById("q");
 const resEl    = document.getElementById("results");
 const countEl  = document.getElementById("count");
@@ -136,25 +323,19 @@ const clearBtn = document.getElementById("clearBtn");
 
 totalEl.textContent = "全 " + guests.length + " 名";
 
-// --- ひらがな⇔カタカナ ---
 function toKata(s){ return s.replace(/[\u3041-\u3096]/g, c=>String.fromCharCode(c.charCodeAt(0)+0x60)); }
 function toHira(s){ return s.replace(/[\u30A1-\u30F6]/g, c=>String.fromCharCode(c.charCodeAt(0)-0x60)); }
 
-// --- ハイライト ---
 function hl(text, q) {
   if (!q || !text) return text;
   const idx = text.toLowerCase().indexOf(q.toLowerCase());
   if (idx === -1) return text;
-  return text.substring(0, idx) + "<mark>" + text.substring(idx, idx + q.length) + "</mark>" + text.substring(idx + q.length);
+  return text.substring(0,idx) + "<mark>" + text.substring(idx,idx+q.length) + "</mark>" + text.substring(idx+q.length);
 }
 
-// --- 分類の色CSSクラス ---
 const catClasses = ["特別来賓","県内市長及び議長"];
-function catClass(cat) {
-  return catClasses.includes(cat) ? "cat-" + cat : "cat-default";
-}
+function catClass(c){ return catClasses.includes(c) ? "cat-"+c : "cat-default"; }
 
-// --- イベント ---
 qEl.addEventListener("input", function(){
   clearBtn.style.display = this.value ? "block" : "none";
   search();
@@ -167,9 +348,12 @@ function clearSearch(){
   search();
 }
 
-// --- 検索 ---
 function search(){
   const q = qEl.value.trim();
+
+  // マップ：全席リセット
+  Object.values(seatEls).forEach(el => el.classList.remove("hit"));
+
   if (!q) {
     resEl.innerHTML = '<p class="empty">名前の一部を入力してください</p>';
     countEl.textContent = "";
@@ -180,14 +364,13 @@ function search(){
   const qH = toHira(q);
 
   const hits = guests.filter(g => {
-    if (g.name.includes(q))  return true;
-    const gK = toKata(g.kana);
-    const gH = toHira(g.kana);
+    if (g.name.includes(q)) return true;
+    const gK = toKata(g.kana), gH = toHira(g.kana);
     if (gK.includes(qK) || gH.includes(qH)) return true;
-    if (g.cat.includes(q))   return true;
-    if (g.org.includes(q))   return true;
+    if (g.cat.includes(q)) return true;
+    if (g.org.includes(q)) return true;
     if (g.title.includes(q)) return true;
-    if (g.seat.includes(q))  return true;
+    if (g.seat.includes(q)) return true;
     return false;
   });
 
@@ -198,21 +381,19 @@ function search(){
     return;
   }
 
-  // ハイライト用：かな検索の場合は元のカナをハイライト対象にする
+  // カード表示
   resEl.innerHTML = hits.map(g => {
-    const detail = [g.org, g.title].filter(x => x).join("　");
-    // どのフィールドにマッチしたか判定してハイライト
-    const hName   = hl(g.name, q);
-    const hKana   = (toKata(g.kana).includes(qK)) ? hl(g.kana, toKata(q)) : hl(g.kana, q);
+    const detail = [g.org, g.title].filter(x=>x).join("　");
+    const hName = hl(g.name, q);
+    const hKana = (toKata(g.kana).includes(qK)) ? hl(g.kana, toKata(q)) : hl(g.kana, q);
     const hDetail = hl(detail, q);
-
     return `
     <div class="card">
       <div class="info">
         <div class="name">${hName}</div>
         <div class="kana">${hKana}</div>
-        ${detail ? '<div class="detail">' + hDetail + '</div>' : ''}
-        ${g.cat  ? '<span class="cat ' + catClass(g.cat) + '">' + g.cat + '</span>' : ''}
+        ${detail ? '<div class="detail">'+hDetail+'</div>' : ''}
+        ${g.cat ? '<span class="cat '+catClass(g.cat)+'">'+g.cat+'</span>' : ''}
       </div>
       <div class="seat-box">
         <div class="label">座席</div>
@@ -220,6 +401,11 @@ function search(){
       </div>
     </div>`;
   }).join("");
+
+  // マップ：ヒットした席をハイライト
+  hits.forEach(g => {
+    if (seatEls[g.seat]) seatEls[g.seat].classList.add("hit");
+  });
 }
 </script>
 </body>
